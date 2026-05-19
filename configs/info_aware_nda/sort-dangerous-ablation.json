@@ -1,0 +1,8 @@
+{
+  "enable": true,
+  "enable_early_switch": true,
+  "enable_trajectory_distill": true,
+  "enable_group_priority": true,
+  "priority_mode": "sort_dangerous_ablation",
+  "save_diagnostics": true
+}

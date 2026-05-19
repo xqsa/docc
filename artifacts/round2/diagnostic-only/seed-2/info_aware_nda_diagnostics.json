@@ -1,0 +1,211 @@
+{
+  "info_aware_nda_enabled": true,
+  "config": {
+    "enable": true,
+    "enable_early_switch": true,
+    "min_nda_fe_ratio": 0.05,
+    "max_nda_fe_ratio": 0.6,
+    "window_size": 2,
+    "patience": 1,
+    "eps_improve": 0.05,
+    "eps_center_shift": 0.05,
+    "eps_diversity": null,
+    "enable_trajectory_distill": true,
+    "max_history_size": 200,
+    "normalize_by_bounds": true,
+    "min_success_gain": 0.0,
+    "enable_group_priority": true,
+    "priority_alpha_conflict": 0.5,
+    "priority_beta_overlap": 0.2,
+    "priority_mode": "diagnostic_only",
+    "budget_min_fe": 1,
+    "enable_group_delta_trace": true,
+    "priority_audit_topk": 3,
+    "save_diagnostics": true,
+    "diagnostics_filename": "info_aware_nda_diagnostics.json"
+  },
+  "total_max_fes": 120,
+  "nda_fe_used": 43,
+  "nda_fe_ratio": 0.35833333333333334,
+  "early_switch_triggered": false,
+  "early_switch_reason": "max_nda_fes_reached",
+  "best_before_nda": 180.0,
+  "best_after_nda": 149.4279799104608,
+  "improvement_rate_last": 0.09084437592504571,
+  "center_shift_last": 0.0,
+  "diversity_last": 0.018825888341768345,
+  "success_step_count": 3,
+  "var_contribution_mean": 1.0,
+  "var_contribution_std": 0.4338056530087632,
+  "var_stability_mean": 0.7179186200263233,
+  "var_stability_std": 0.2812090335296111,
+  "conflict_prior_mean": 0.043181966891581366,
+  "conflict_prior_max": 0.39999559878233837,
+  "group_priority_mean": 1.0000000000000002,
+  "group_priority_std": 0.11776121684577055,
+  "top_priority_groups": [
+    {
+      "group_id": 0,
+      "priority": 1.1573310304984716,
+      "group_size": 10,
+      "overlap_ratio": 0.2
+    },
+    {
+      "group_id": 1,
+      "priority": 0.9686289497674196,
+      "group_size": 10,
+      "overlap_ratio": 0.4
+    },
+    {
+      "group_id": 2,
+      "priority": 0.8740400197341088,
+      "group_size": 4,
+      "overlap_ratio": 0.5
+    }
+  ],
+  "priority_mode_effective": "diagnostic_only",
+  "sort_dangerous_ablation_changed_order": false,
+  "group_trace_count": 3,
+  "priority_delta_spearman": 1.0,
+  "priority_delta_pearson": 0.8182267305520499,
+  "topk_priority_hit_rate": 1.0,
+  "topk_priority_mean_delta": 22.331303374954782,
+  "bottomk_priority_mean_delta": 22.331303374954782,
+  "positive_delta_rate_topk": 1.0,
+  "positive_delta_rate_all": 1.0,
+  "group_trace_sample": [
+    {
+      "cycle_id": 0,
+      "scheduled_position": 0,
+      "original_group_id": 0,
+      "group_size": 10,
+      "priority": 1.1573310304984716,
+      "budget": 26,
+      "actual_fe": 26,
+      "fitness_before": 149.4279799104608,
+      "fitness_after": 117.77368251217649,
+      "actual_delta": 31.654297398284314,
+      "overlap_var_count": 2,
+      "overlap_ratio": 0.2,
+      "conflict_prior_mean": 0.3872542230725556,
+      "was_sorted": false
+    },
+    {
+      "cycle_id": 0,
+      "scheduled_position": 1,
+      "original_group_id": 1,
+      "group_size": 10,
+      "priority": 0.9686289497674196,
+      "budget": 26,
+      "actual_fe": 26,
+      "fitness_before": 117.77368251217649,
+      "fitness_after": 88.89478712212329,
+      "actual_delta": 28.878895390053202,
+      "overlap_var_count": 4,
+      "overlap_ratio": 0.4,
+      "conflict_prior_mean": 0.21590983445790682,
+      "was_sorted": false
+    },
+    {
+      "cycle_id": 0,
+      "scheduled_position": 2,
+      "original_group_id": 2,
+      "group_size": 4,
+      "priority": 0.8740400197341088,
+      "budget": 26,
+      "actual_fe": 25,
+      "fitness_before": 88.89478712212329,
+      "fitness_after": 82.43406978559646,
+      "actual_delta": 6.460717336526827,
+      "overlap_var_count": 2,
+      "overlap_ratio": 0.5,
+      "conflict_prior_mean": 0.044565445843258056,
+      "was_sorted": false
+    }
+  ],
+  "priority_audit_warnings": [],
+  "execution_order": [
+    0,
+    1,
+    2
+  ],
+  "warnings": [],
+  "cc_prior": {
+    "group_priority": [
+      1.1573310304984716,
+      0.9686289497674196,
+      0.8740400197341088
+    ],
+    "conflict_prior": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.3745128473627728,
+      0.39999559878233837,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.08913089168149091,
+      5.025202476360846e-12,
+      0.0,
+      0.0
+    ],
+    "overlap_degree": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      2.0,
+      2.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      2.0,
+      2.0,
+      1.0,
+      1.0
+    ],
+    "diagnostics": {
+      "group_priority_min": 0.8740400197341088,
+      "group_priority_max": 1.1573310304984716,
+      "group_priority_mean": 1.0000000000000002,
+      "group_priority_std": 0.11776121684577055,
+      "top_priority_groups": [
+        {
+          "group_id": 0,
+          "priority": 1.1573310304984716,
+          "group_size": 10,
+          "overlap_ratio": 0.2
+        },
+        {
+          "group_id": 1,
+          "priority": 0.9686289497674196,
+          "group_size": 10,
+          "overlap_ratio": 0.4
+        },
+        {
+          "group_id": 2,
+          "priority": 0.8740400197341088,
+          "group_size": 4,
+          "overlap_ratio": 0.5
+        }
+      ]
+    }
+  },
+  "group_trace_csv": "C:/Users/83718/Desktop/HCC/HCC-main/artifacts/round2/diagnostic-only/seed-2/group_priority_trace.csv"
+}

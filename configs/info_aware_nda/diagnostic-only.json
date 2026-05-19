@@ -1,0 +1,8 @@
+{
+  "enable": true,
+  "enable_early_switch": true,
+  "enable_trajectory_distill": true,
+  "enable_group_priority": true,
+  "priority_mode": "diagnostic_only",
+  "save_diagnostics": true
+}

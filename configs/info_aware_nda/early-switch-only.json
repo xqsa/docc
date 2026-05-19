@@ -1,0 +1,7 @@
+{
+  "enable": true,
+  "enable_early_switch": true,
+  "enable_trajectory_distill": false,
+  "enable_group_priority": false,
+  "priority_mode": "off"
+}

@@ -20,6 +20,20 @@ from AOB.utils import (
 from HCC.NDAs.MMES.mmes import MMES
 from HCC.OPT.CMAES.cmaes import CMAES
 from HCC.RDDSM import Decomposition
+from HCC.info_aware_nda import (
+    CCPrior,
+    InfoAwareNDAConfig,
+    NDAInfo,
+    allocate_priority_budgets,
+    build_cc_prior,
+    build_info_aware_diagnostics_payload,
+    build_priority_order,
+    compute_priority_audit,
+    load_info_aware_nda_config,
+    merge_warnings,
+    run_adaptive_info_aware_nda,
+    save_info_aware_diagnostics,
+)
 from experiment_protocols import protocol_choices, resolve_protocol
 
 
@@ -61,6 +75,25 @@ DIAGNOSTIC_FIELDNAMES = [
     "run_id",
     "method",
 ]
+GROUP_TRACE_FIELDNAMES = [
+    "cycle_id",
+    "scheduled_position",
+    "original_group_id",
+    "group_size",
+    "priority",
+    "budget",
+    "actual_fe",
+    "fitness_before",
+    "fitness_after",
+    "actual_delta",
+    "overlap_var_count",
+    "overlap_ratio",
+    "conflict_prior_mean",
+    "was_sorted",
+]
+
+
+DEFAULT_INFO_AWARE_DIAGNOSTICS_ARTIFACT = Path("artifacts") / "info_aware_nda_diagnostics.json"
 
 
 def parse_problem_code(problem_code):
@@ -165,6 +198,13 @@ def compute_original_glofes(original_do, max_fes, has_overlap):
     ratio = float(0.2 + 0.8 * float(original_do))
     ratio = float(np.clip(ratio, 0.0, 1.0))
     return int(ratio * int(max_fes))
+
+
+def compute_adjacent_overlaps_for_groups(grouping_result):
+    if len(grouping_result) <= 1:
+        return []
+    _, _, adjacent_overlapping_elements = remove_overlapping_groups(grouping_result)
+    return adjacent_overlapping_elements
 
 
 def blend_overlapping_elements(best_individual, original_best_individual, overlapping_elements, previous_delta, current_delta):
@@ -299,6 +339,322 @@ def ensure_csv_header(path, fieldnames):
         writer.writeheader()
 
 
+def save_group_trace_csv(path, rows):
+    rows = list(rows or [])
+    if not rows:
+        return
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=GROUP_TRACE_FIELDNAMES)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field) for field in GROUP_TRACE_FIELDNAMES})
+
+
+def _default_nda_info(dimension, warning):
+    info = NDAInfo(
+        fe_used=0,
+        warnings=[str(warning)],
+    )
+    info.var_contribution = np.ones(int(dimension), dtype=float)
+    info.var_stability = np.ones(int(dimension), dtype=float)
+    info.var_direction = np.zeros(int(dimension), dtype=int)
+    return info
+
+
+def _resolve_cc_schedule(grouping_result, adjacent_overlapping_elements, remaining_fes, cc_prior, info_aware_config):
+    group_count = len(grouping_result)
+    if group_count <= 0:
+        return [], [], [], [], {
+            "priority_mode_effective": "off",
+            "sort_dangerous_ablation_changed_order": False,
+            "warnings": [],
+            "original_group_ids": [],
+        }
+
+    uniform_subfes = int(math.ceil(int(remaining_fes) / float(group_count)))
+    default_budgets = [int(uniform_subfes)] * group_count
+    execution_order = list(range(group_count))
+    scheduled_groups = grouping_result
+    scheduled_adjacent_overlaps = adjacent_overlapping_elements
+    schedule_metadata = {
+        "priority_mode_effective": "off",
+        "sort_dangerous_ablation_changed_order": False,
+        "warnings": [],
+        "original_group_ids": execution_order.copy(),
+    }
+
+    if cc_prior is None or info_aware_config is None or not info_aware_config.enable_group_priority:
+        return scheduled_groups, scheduled_adjacent_overlaps, default_budgets, execution_order, schedule_metadata
+
+    schedule_metadata["priority_mode_effective"] = str(info_aware_config.priority_mode or "off")
+
+    if info_aware_config.priority_mode == "off":
+        return scheduled_groups, scheduled_adjacent_overlaps, default_budgets, execution_order, schedule_metadata
+
+    if info_aware_config.priority_mode == "diagnostic_only":
+        return scheduled_groups, scheduled_adjacent_overlaps, default_budgets, execution_order, schedule_metadata
+
+    if info_aware_config.priority_mode == "sort_dangerous_ablation":
+        execution_order = build_priority_order(cc_prior.group_priority)
+        if execution_order:
+            scheduled_groups = [grouping_result[group_id] for group_id in execution_order]
+            scheduled_adjacent_overlaps = compute_adjacent_overlaps_for_groups(scheduled_groups)
+        schedule_metadata["original_group_ids"] = execution_order.copy()
+        schedule_metadata["sort_dangerous_ablation_changed_order"] = execution_order != list(range(group_count))
+        schedule_metadata["warnings"].append("sort_dangerous_ablation_changes_overlap_order")
+        return scheduled_groups, scheduled_adjacent_overlaps, default_budgets, execution_order, schedule_metadata
+
+    if info_aware_config.priority_mode == "budget":
+        budgets = allocate_priority_budgets(
+            remaining_fes,
+            cc_prior.group_priority,
+            min_budget=info_aware_config.budget_min_fe,
+        )
+        return scheduled_groups, scheduled_adjacent_overlaps, budgets, execution_order, schedule_metadata
+
+    return scheduled_groups, scheduled_adjacent_overlaps, default_budgets, execution_order, schedule_metadata
+
+
+def run_hcc_core(
+    fun,
+    output_path,
+    best_individual,
+    max_fes,
+    grouping_result,
+    info,
+    adjacent_overlapping_elements,
+    seed=None,
+    method=HCC_ES_METHOD,
+    problem_code=None,
+    info_aware_config=None,
+    return_metadata=False,
+):
+    time_start = time.time()
+    canonicalize_method(method)
+    best_individual = np.asarray(best_individual, dtype=float).copy()
+    overlap_hypergraph = build_overlap_hypergraph(grouping_result)
+    overlap_features = build_overlap_features(grouping_result, overlap_hypergraph)
+    original_do = float(overlap_features["overlap_ratio"])
+    has_overlap = bool(overlap_hypergraph["overlap_vars"])
+    original_glofes = compute_original_glofes(original_do, max_fes, has_overlap)
+    normalized_info_aware_config = info_aware_config.normalized() if isinstance(info_aware_config, InfoAwareNDAConfig) else info_aware_config
+
+    seed_offset = 0
+    current_best_fitness = None
+    sum_fes = 0
+    nda_info = None
+    cc_prior = None
+    execution_order = list(range(len(grouping_result)))
+    extra_warnings = []
+    group_trace_rows = []
+    priority_audit = {}
+    priority_mode_effective = "off"
+    sort_dangerous_ablation_changed_order = False
+    schedule_warnings = []
+    trace_enabled = bool(
+        normalized_info_aware_config is not None
+        and normalized_info_aware_config.enable
+        and normalized_info_aware_config.enable_group_delta_trace
+    )
+    group_overlap_counts = [int(value) for value in overlap_features["group_overlap_var_count"]]
+    group_overlap_ratios = [
+        float(group_overlap_counts[group_id] / max(1, len(grouping_result[group_id])))
+        for group_id in range(len(grouping_result))
+    ]
+    group_conflict_prior_means = [0.0] * len(grouping_result)
+
+    if original_glofes > 0:
+        problem_global = {
+            "fitness_function": fun,
+            "ndim_problem": info["dimension"],
+            "lower_boundary": info["lower"] * np.ones((info["dimension"],)),
+            "upper_boundary": info["upper"] * np.ones((info["dimension"],)),
+        }
+        options_global = {
+            "max_function_evaluations": int(min(original_glofes, max_fes)),
+            "mean": (best_individual,),
+            "sigma": 0.5,
+            "is_restart": False,
+            "verbose": 1000,
+            "seed_rng": stage_seed(seed, seed_offset),
+        }
+        seed_offset += 1
+        if normalized_info_aware_config is not None and normalized_info_aware_config.enable:
+            results_global = run_adaptive_info_aware_nda(
+                problem_global,
+                options_global,
+                normalized_info_aware_config,
+                int(max_fes),
+                int(original_glofes),
+            )
+            nda_info = results_global.get("nda_info")
+        else:
+            optimizer_global = MMES(problem_global, options_global)
+            results_global = optimizer_global.optimize()
+        best_individual = np.asarray(results_global["best_so_far_x"], dtype=float).copy()
+        current_best_fitness = float(results_global["best_so_far_y"])
+        sum_fes = int(results_global["n_function_evaluations"])
+    elif normalized_info_aware_config is not None and normalized_info_aware_config.enable:
+        nda_info = _default_nda_info(info["dimension"], "nda_stage_skipped_due_to_zero_glofes")
+
+    if current_best_fitness is None and sum_fes < int(max_fes):
+        current_best_fitness = float(np.asarray(fun(best_individual)).reshape(-1)[0])
+        sum_fes += 1
+
+    if normalized_info_aware_config is not None:
+        if nda_info is None:
+            nda_info = _default_nda_info(
+                info["dimension"],
+                "info_aware_nda_disabled" if not normalized_info_aware_config.enable else "nda_info_unavailable",
+            )
+        if normalized_info_aware_config.enable:
+            contribution = nda_info.var_contribution
+            stability = nda_info.var_stability
+            direction = nda_info.var_direction
+            if contribution is None:
+                contribution = np.ones(info["dimension"], dtype=float)
+                extra_warnings.append("var_contribution_missing_fallback_to_ones")
+            if stability is None:
+                stability = np.ones(info["dimension"], dtype=float)
+                extra_warnings.append("var_stability_missing_fallback_to_ones")
+            if direction is None:
+                direction = np.zeros(info["dimension"], dtype=int)
+                extra_warnings.append("var_direction_missing_fallback_to_zeros")
+            cc_prior = build_cc_prior(
+                grouping_result,
+                info["dimension"],
+                overlap_hypergraph,
+                contribution,
+                stability,
+                direction,
+                normalized_info_aware_config,
+            )
+            for group_id in range(len(grouping_result)):
+                overlap_vars = np.asarray(overlap_hypergraph["group_to_overlap_vars"].get(int(group_id), []), dtype=int)
+                if overlap_vars.size > 0:
+                    group_conflict_prior_means[group_id] = float(np.mean(cc_prior.conflict_prior[overlap_vars]))
+
+    cycle_id = 0
+    while sum_fes < int(max_fes):
+        group_count = len(grouping_result)
+        if group_count <= 0:
+            break
+        remaining_fes = int(max_fes - sum_fes)
+        if remaining_fes <= 0:
+            break
+
+        scheduled_groups, scheduled_adjacent_overlaps, subspace_budgets, execution_order, schedule_metadata = _resolve_cc_schedule(
+            grouping_result,
+            adjacent_overlapping_elements,
+            remaining_fes,
+            cc_prior,
+            normalized_info_aware_config,
+        )
+        priority_mode_effective = schedule_metadata["priority_mode_effective"]
+        sort_dangerous_ablation_changed_order = bool(schedule_metadata["sort_dangerous_ablation_changed_order"])
+        schedule_warnings = merge_warnings(schedule_warnings, schedule_metadata.get("warnings", []))
+        scheduled_original_group_ids = list(schedule_metadata.get("original_group_ids", execution_order))
+        group_deltas = np.full(len(scheduled_groups), float("nan"), dtype=float)
+
+        for group_id, dims in enumerate(scheduled_groups):
+            sub_fes = min(int(subspace_budgets[group_id]), int(max_fes - sum_fes))
+            if sub_fes <= 0:
+                continue
+            dims = list(dims)
+            original_group_id = int(scheduled_original_group_ids[group_id]) if group_id < len(scheduled_original_group_ids) else int(group_id)
+            original_best_individual = best_individual.copy()
+            original_best_fitness = float(current_best_fitness)
+            assigned_budget = int(subspace_budgets[group_id])
+            objective = lambda x_batch, dims=dims, current=best_individual: fun(combine(x_batch, current, dims))
+            problem_cc = {
+                "fitness_function": objective,
+                "ndim_problem": len(dims),
+                "lower_boundary": info["lower"] * np.ones((len(dims),)),
+                "upper_boundary": info["upper"] * np.ones((len(dims),)),
+            }
+            options_cc = {
+                "max_function_evaluations": int(sub_fes),
+                "mean": (best_individual[dims],),
+                "sigma": 0.5,
+                "is_restart": False,
+                "verbose": 1000,
+                "early_stopping_evaluations": 1000,
+                "seed_rng": stage_seed(seed, seed_offset),
+            }
+            seed_offset += 1
+            optimizer_cc = CMAES(problem_cc, options_cc)
+            results_cc = optimizer_cc.optimize()
+            best_individual[dims] = np.asarray(results_cc["best_so_far_x"], dtype=float).copy()
+            actual_fe = int(results_cc["n_function_evaluations"])
+            sum_fes += actual_fe
+            subspace_candidate_fitness = float(results_cc["best_so_far_y"])
+            delta = float(original_best_fitness - subspace_candidate_fitness)
+            group_deltas[group_id] = delta
+            if trace_enabled:
+                priority_value = float("nan")
+                if cc_prior is not None and original_group_id < len(cc_prior.group_priority):
+                    priority_value = float(cc_prior.group_priority[original_group_id])
+                group_trace_rows.append(
+                    {
+                        "cycle_id": int(cycle_id),
+                        "scheduled_position": int(group_id),
+                        "original_group_id": int(original_group_id),
+                        "group_size": int(len(dims)),
+                        "priority": priority_value,
+                        "budget": int(assigned_budget),
+                        "actual_fe": int(actual_fe),
+                        "fitness_before": float(original_best_fitness),
+                        "fitness_after": float(subspace_candidate_fitness),
+                        "actual_delta": float(delta),
+                        "overlap_var_count": int(group_overlap_counts[original_group_id]),
+                        "overlap_ratio": float(group_overlap_ratios[original_group_id]),
+                        "conflict_prior_mean": float(group_conflict_prior_means[original_group_id]),
+                        "was_sorted": bool(priority_mode_effective == "sort_dangerous_ablation"),
+                    }
+                )
+            if group_id > 0:
+                overlap_indices = np.asarray(scheduled_adjacent_overlaps[group_id - 1], dtype=int)
+                blend_overlapping_elements(
+                    best_individual,
+                    original_best_individual,
+                    overlap_indices,
+                    group_deltas[group_id - 1],
+                    group_deltas[group_id],
+                )
+            current_best_fitness = subspace_candidate_fitness
+            if sum_fes >= int(max_fes):
+                break
+        cycle_id += 1
+
+    time_end = time.time()
+    curve = list(getattr(fun, "fitness_record", []))
+    metadata = {}
+    if trace_enabled:
+        priority_audit = compute_priority_audit(
+            group_trace_rows,
+            topk=normalized_info_aware_config.priority_audit_topk if normalized_info_aware_config is not None else 3,
+        )
+        metadata["group_trace_rows"] = group_trace_rows
+    if normalized_info_aware_config is not None and normalized_info_aware_config.save_diagnostics:
+        metadata["info_aware_diagnostics"] = build_info_aware_diagnostics_payload(
+            normalized_info_aware_config,
+            nda_info,
+            cc_prior,
+            int(max_fes),
+            execution_order=execution_order,
+            warnings=merge_warnings(extra_warnings, schedule_warnings),
+            priority_mode_effective=priority_mode_effective,
+            sort_dangerous_ablation_changed_order=sort_dangerous_ablation_changed_order,
+            group_trace_rows=group_trace_rows,
+            priority_audit=priority_audit,
+        )
+    if return_metadata:
+        return curve, (time_end - time_start), [], metadata
+    return curve, (time_end - time_start), []
+
+
 def read_summary_keys(path):
     path = Path(path)
     if not path.exists():
@@ -365,102 +721,25 @@ def optimization_task(
     seed=None,
     method=HCC_ES_METHOD,
     problem_code=None,
+    info_aware_config=None,
+    return_metadata=False,
 ):
-    time_start = time.time()
-    canonicalize_method(method)
     bench = Benchmark(output_path)
     fun = bench.get_function(fun_name, fun_id)
-    best_individual = np.asarray(best_individual, dtype=float).copy()
-    overlap_hypergraph = build_overlap_hypergraph(grouping_result)
-    overlap_features = build_overlap_features(grouping_result, overlap_hypergraph)
-    original_do = float(overlap_features["overlap_ratio"])
-    has_overlap = bool(overlap_hypergraph["overlap_vars"])
-    glofes = compute_original_glofes(original_do, max_fes, has_overlap)
-    seed_offset = 0
-    current_best_fitness = None
-    sum_fes = 0
-
-    if glofes > 0:
-        problem_global = {
-            "fitness_function": fun,
-            "ndim_problem": info["dimension"],
-            "lower_boundary": info["lower"] * np.ones((info["dimension"],)),
-            "upper_boundary": info["upper"] * np.ones((info["dimension"],)),
-        }
-        options_global = {
-            "max_function_evaluations": int(min(glofes, max_fes)),
-            "mean": (best_individual,),
-            "sigma": 0.5,
-            "is_restart": False,
-            "verbose": 1000,
-            "seed_rng": stage_seed(seed, seed_offset),
-        }
-        seed_offset += 1
-        optimizer_global = MMES(problem_global, options_global)
-        results_global = optimizer_global.optimize()
-        best_individual = np.asarray(results_global["best_so_far_x"], dtype=float).copy()
-        current_best_fitness = float(results_global["best_so_far_y"])
-        sum_fes = int(results_global["n_function_evaluations"])
-
-    if current_best_fitness is None and sum_fes < int(max_fes):
-        current_best_fitness = float(np.asarray(fun(best_individual)).reshape(-1)[0])
-        sum_fes += 1
-
-    while sum_fes < int(max_fes):
-        group_count = len(grouping_result)
-        if group_count <= 0:
-            break
-        remaining_fes = int(max_fes - sum_fes)
-        if remaining_fes <= 0:
-            break
-        uniform_subfes = int(math.ceil(remaining_fes / float(group_count)))
-        group_deltas = np.full(group_count, float("nan"), dtype=float)
-        for group_id, dims in enumerate(grouping_result):
-            sub_fes = min(uniform_subfes, int(max_fes - sum_fes))
-            if sub_fes <= 0:
-                continue
-            dims = list(dims)
-            original_best_individual = best_individual.copy()
-            original_best_fitness = float(current_best_fitness)
-            objective = lambda x_batch, dims=dims, current=best_individual: fun(combine(x_batch, current, dims))
-            problem_cc = {
-                "fitness_function": objective,
-                "ndim_problem": len(dims),
-                "lower_boundary": info["lower"] * np.ones((len(dims),)),
-                "upper_boundary": info["upper"] * np.ones((len(dims),)),
-            }
-            options_cc = {
-                "max_function_evaluations": int(sub_fes),
-                "mean": (best_individual[dims],),
-                "sigma": 0.5,
-                "is_restart": False,
-                "verbose": 1000,
-                "early_stopping_evaluations": 1000,
-                "seed_rng": stage_seed(seed, seed_offset),
-            }
-            seed_offset += 1
-            optimizer_cc = CMAES(problem_cc, options_cc)
-            results_cc = optimizer_cc.optimize()
-            best_individual[dims] = np.asarray(results_cc["best_so_far_x"], dtype=float).copy()
-            sum_fes += int(results_cc["n_function_evaluations"])
-            subspace_candidate_fitness = float(results_cc["best_so_far_y"])
-            delta = float(original_best_fitness - subspace_candidate_fitness)
-            group_deltas[group_id] = delta
-            if group_id > 0:
-                overlap_indices = np.asarray(adjacent_overlapping_elements[group_id - 1], dtype=int)
-                blend_overlapping_elements(
-                    best_individual,
-                    original_best_individual,
-                    overlap_indices,
-                    group_deltas[group_id - 1],
-                    group_deltas[group_id],
-                )
-            current_best_fitness = subspace_candidate_fitness
-            if sum_fes >= int(max_fes):
-                break
-
-    time_end = time.time()
-    return fun.fitness_record, (time_end - time_start), []
+    return run_hcc_core(
+        fun,
+        output_path,
+        best_individual,
+        max_fes,
+        grouping_result,
+        info,
+        adjacent_overlapping_elements,
+        seed=seed,
+        method=method,
+        problem_code=problem_code,
+        info_aware_config=info_aware_config,
+        return_metadata=return_metadata,
+    )
 
 
 def parallel_optimization(
@@ -475,6 +754,7 @@ def parallel_optimization(
     output_data,
     adjacent_overlapping_elements,
     method=HCC_ES_METHOD,
+    info_aware_config=None,
 ):
     with ProcessPoolExecutor() as executor:
         futures = [
@@ -491,6 +771,7 @@ def parallel_optimization(
                 seed,
                 method,
                 None,
+                info_aware_config,
             )
             for seed in range(1, int(cycle_num) + 1)
         ]
@@ -517,6 +798,8 @@ def parse_args():
     parser.add_argument("--method", nargs="+", choices=METHOD_CHOICES, default=[HCC_ES_METHOD], help="Only hcc_es_original is supported.")
     parser.add_argument("--workers", type=int, default=1, help="Number of independent problem/seed workers.")
     parser.add_argument("--record-fes", nargs="*", type=int, default=[], help="Evaluation checkpoints written as best_at_<FE> columns.")
+    parser.add_argument("--enable-info-aware-nda", action="store_true", help="Enable the optional adaptive information-aware NDA warm-start.")
+    parser.add_argument("--info-aware-nda-config", help="Optional JSON config for the adaptive information-aware NDA warm-start.")
     parser.add_argument(
         "--summary-refresh-every",
         type=int,
@@ -535,7 +818,7 @@ def build_hcc_es_inputs(problem_code):
     design_matrix = np.loadtxt(file_path, delimiter=",")
     decomposition = Decomposition(design_matrix)
     grouping_result = decomposition.decomposition()
-    _, _, adjacent_overlapping_elements = remove_overlapping_groups(grouping_result)
+    adjacent_overlapping_elements = compute_adjacent_overlaps_for_groups(grouping_result)
     info = bench.get_info(fun_name, fun_id)
     return {
         "problem": normalized,
@@ -548,10 +831,10 @@ def build_hcc_es_inputs(problem_code):
     }
 
 
-def run_problem_seed_task(problem_code, seed, tfes, method, output_dir, record_fes=None):
+def run_problem_seed_task(problem_code, seed, tfes, method, output_dir, record_fes=None, info_aware_config=None):
     inputs = build_hcc_es_inputs(problem_code)
     run_output_path = str(Path(output_dir) / inputs["problem"] / f"seed-{seed}") + "/"
-    curve, runtime, diagnostics = optimization_task(
+    curve, runtime, diagnostics, metadata = optimization_task(
         inputs["fun_name"],
         inputs["fun_id"],
         run_output_path,
@@ -563,10 +846,22 @@ def run_problem_seed_task(problem_code, seed, tfes, method, output_dir, record_f
         int(seed),
         method,
         inputs["problem"],
+        info_aware_config,
+        True,
     )
+    if metadata.get("info_aware_diagnostics") is not None:
+        if metadata.get("group_trace_rows"):
+            trace_csv_path = Path(run_output_path) / "group_priority_trace.csv"
+            save_group_trace_csv(trace_csv_path, metadata["group_trace_rows"])
+            metadata["info_aware_diagnostics"]["group_trace_csv"] = trace_csv_path.as_posix()
+        diagnostics_path = Path(run_output_path) / (
+            info_aware_config.diagnostics_filename if isinstance(info_aware_config, InfoAwareNDAConfig) else DEFAULT_INFO_AWARE_DIAGNOSTICS_ARTIFACT.name
+        )
+        save_info_aware_diagnostics(diagnostics_path, metadata["info_aware_diagnostics"])
     return {
         "detail": build_run_detail_row(inputs["problem"], method, seed, curve, runtime, "ok", diagnostics, record_fes),
         "diagnostics": diagnostics,
+        "metadata": metadata,
     }
 
 
@@ -576,6 +871,7 @@ def run_problem_code_batch(args):
     tfes = int(args.tfes or resolve_protocol(args.protocol)["max_fes"])
     methods = [canonicalize_method(method) for method in args.method]
     record_fes = list(args.record_fes)
+    info_aware_config = load_info_aware_nda_config(args.info_aware_nda_config, args.enable_info_aware_nda)
     timestamp = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
     method_slug = methods[0]
     output_dir = Path(args.output_dir or f"HCC_SRC/result/hcc-es-baselines/{method_slug}-{'-'.join(problems)}-{len(seeds)}seeds-{tfes}-{timestamp}")
@@ -618,11 +914,12 @@ def run_problem_code_batch(args):
     if args.workers <= 1:
         for problem, method, seed in tasks:
             try:
-                result = run_problem_seed_task(problem, seed, tfes, method, output_dir, record_fes)
+                result = run_problem_seed_task(problem, seed, tfes, method, output_dir, record_fes, info_aware_config)
             except Exception as exc:
                 result = {
                     "detail": build_run_detail_row(problem, method, seed, [], 0.0, f"error: {exc}", [], record_fes),
                     "diagnostics": [],
+                    "metadata": {},
                 }
             append_csv_row(detail_path, result["detail"], RUN_DETAIL_FIELDNAMES + checkpoint_fieldnames(record_fes))
             append_csv_rows(diagnostics_path, result["diagnostics"], DIAGNOSTIC_FIELDNAMES)
@@ -632,7 +929,7 @@ def run_problem_code_batch(args):
     else:
         with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers) as executor:
             futures = {
-                executor.submit(run_problem_seed_task, problem, seed, tfes, method, output_dir, record_fes): (problem, method, seed)
+                executor.submit(run_problem_seed_task, problem, seed, tfes, method, output_dir, record_fes, info_aware_config): (problem, method, seed)
                 for problem, method, seed in tasks
             }
             for future in concurrent.futures.as_completed(futures):
@@ -643,6 +940,7 @@ def run_problem_code_batch(args):
                     result = {
                         "detail": build_run_detail_row(problem, method, seed, [], 0.0, f"error: {exc}", [], record_fes),
                         "diagnostics": [],
+                        "metadata": {},
                     }
                 append_csv_row(detail_path, result["detail"], RUN_DETAIL_FIELDNAMES + checkpoint_fieldnames(record_fes))
                 append_csv_rows(diagnostics_path, result["diagnostics"], DIAGNOSTIC_FIELDNAMES)
@@ -656,6 +954,7 @@ def run_problem_code_batch(args):
 def run_protocol_batch(args):
     protocol = resolve_protocol(args.protocol)
     methods = [canonicalize_method(method) for method in (args.method or [HCC_ES_METHOD])]
+    info_aware_config = load_info_aware_nda_config(args.info_aware_nda_config, args.enable_info_aware_nda)
     if len(methods) != 1:
         raise ValueError("Protocol batch supports exactly one method.")
     method = methods[0]
@@ -690,7 +989,7 @@ def run_protocol_batch(args):
             design_matrix = np.loadtxt(file_path, delimiter=",")
             decomposition = Decomposition(design_matrix)
             grouping_result = decomposition.decomposition()
-            _, _, adjacent_overlapping_elements = remove_overlapping_groups(grouping_result)
+            adjacent_overlapping_elements = compute_adjacent_overlaps_for_groups(grouping_result)
             info = bench.get_info(fun_name, fun_id)
             fun = bench.get_function(fun_name, fun_id)
             best_individual = np.zeros(info["dimension"])
@@ -708,6 +1007,7 @@ def run_protocol_batch(args):
                 output_data,
                 adjacent_overlapping_elements,
                 method,
+                info_aware_config,
             )
             print(f"{fun_name}_{fun_id} average time: {average_time}")
             output_data[f"{fun_name}_{fun_id}_time"].append(average_time)

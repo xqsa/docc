@@ -1,0 +1,213 @@
+{
+  "info_aware_nda_enabled": true,
+  "config": {
+    "enable": true,
+    "enable_early_switch": true,
+    "min_nda_fe_ratio": 0.05,
+    "max_nda_fe_ratio": 0.6,
+    "window_size": 2,
+    "patience": 1,
+    "eps_improve": 0.05,
+    "eps_center_shift": 0.05,
+    "eps_diversity": null,
+    "enable_trajectory_distill": true,
+    "max_history_size": 200,
+    "normalize_by_bounds": true,
+    "min_success_gain": 0.0,
+    "enable_group_priority": true,
+    "priority_alpha_conflict": 0.5,
+    "priority_beta_overlap": 0.2,
+    "priority_mode": "sort_dangerous_ablation",
+    "budget_min_fe": 1,
+    "enable_group_delta_trace": true,
+    "priority_audit_topk": 3,
+    "save_diagnostics": true,
+    "diagnostics_filename": "info_aware_nda_diagnostics.json"
+  },
+  "total_max_fes": 120,
+  "nda_fe_used": 13,
+  "nda_fe_ratio": 0.10833333333333334,
+  "early_switch_triggered": true,
+  "early_switch_reason": "early_stagnation",
+  "best_before_nda": 180.0,
+  "best_after_nda": 176.374640641639,
+  "improvement_rate_last": 0.020140885324227722,
+  "center_shift_last": 0.007449495274432007,
+  "diversity_last": 0.013873084991462049,
+  "success_step_count": 1,
+  "var_contribution_mean": 1.0,
+  "var_contribution_std": 0.6343864497009695,
+  "var_stability_mean": 0.9999999999526693,
+  "var_stability_std": 3.32988700844079e-11,
+  "conflict_prior_mean": 8.116091132492897e-12,
+  "conflict_prior_max": 5.2958859519947055e-11,
+  "group_priority_mean": 1.0000000000000002,
+  "group_priority_std": 0.07729852322813757,
+  "top_priority_groups": [
+    {
+      "group_id": 0,
+      "priority": 1.1077963403985196,
+      "group_size": 10,
+      "overlap_ratio": 0.2
+    },
+    {
+      "group_id": 2,
+      "priority": 0.9618356877952459,
+      "group_size": 4,
+      "overlap_ratio": 0.5
+    },
+    {
+      "group_id": 1,
+      "priority": 0.9303679718062348,
+      "group_size": 10,
+      "overlap_ratio": 0.4
+    }
+  ],
+  "priority_mode_effective": "sort_dangerous_ablation",
+  "sort_dangerous_ablation_changed_order": true,
+  "group_trace_count": 3,
+  "priority_delta_spearman": 0.5,
+  "priority_delta_pearson": 0.3531331596953319,
+  "topk_priority_hit_rate": 1.0,
+  "topk_priority_mean_delta": 28.95372821193458,
+  "bottomk_priority_mean_delta": 28.95372821193458,
+  "positive_delta_rate_topk": 1.0,
+  "positive_delta_rate_all": 1.0,
+  "group_trace_sample": [
+    {
+      "cycle_id": 0,
+      "scheduled_position": 0,
+      "original_group_id": 0,
+      "group_size": 10,
+      "priority": 1.1077963403985196,
+      "budget": 36,
+      "actual_fe": 36,
+      "fitness_before": 176.374640641639,
+      "fitness_after": 141.85697491273868,
+      "actual_delta": 34.51766572890031,
+      "overlap_var_count": 2,
+      "overlap_ratio": 0.2,
+      "conflict_prior_mean": 4.088746008434896e-11,
+      "was_sorted": true
+    },
+    {
+      "cycle_id": 0,
+      "scheduled_position": 1,
+      "original_group_id": 2,
+      "group_size": 4,
+      "priority": 0.9618356877952459,
+      "budget": 36,
+      "actual_fe": 36,
+      "fitness_before": 141.85697491273868,
+      "fitness_after": 123.94906339337795,
+      "actual_delta": 17.907911519360724,
+      "overlap_var_count": 2,
+      "overlap_ratio": 0.5,
+      "conflict_prior_mean": 4.0273451240580016e-11,
+      "was_sorted": true
+    },
+    {
+      "cycle_id": 0,
+      "scheduled_position": 2,
+      "original_group_id": 1,
+      "group_size": 10,
+      "priority": 0.9303679718062348,
+      "budget": 36,
+      "actual_fe": 35,
+      "fitness_before": 123.94906339337795,
+      "fitness_after": 89.51345600583525,
+      "actual_delta": 34.4356073875427,
+      "overlap_var_count": 4,
+      "overlap_ratio": 0.4,
+      "conflict_prior_mean": 4.058045566246449e-11,
+      "was_sorted": true
+    }
+  ],
+  "priority_audit_warnings": [],
+  "execution_order": [
+    0,
+    2,
+    1
+  ],
+  "warnings": [
+    "sort_dangerous_ablation_changes_overlap_order"
+  ],
+  "cc_prior": {
+    "group_priority": [
+      1.1077963403985196,
+      0.9303679718062348,
+      0.9618356877952459
+    ],
+    "conflict_prior": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      5.2958859519947055e-11,
+      2.8816060648750863e-11,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      3.8632985699393885e-11,
+      4.191391678176615e-11,
+      0.0,
+      0.0
+    ],
+    "overlap_degree": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      2.0,
+      2.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      2.0,
+      2.0,
+      1.0,
+      1.0
+    ],
+    "diagnostics": {
+      "group_priority_min": 0.9303679718062348,
+      "group_priority_max": 1.1077963403985196,
+      "group_priority_mean": 1.0000000000000002,
+      "group_priority_std": 0.07729852322813757,
+      "top_priority_groups": [
+        {
+          "group_id": 0,
+          "priority": 1.1077963403985196,
+          "group_size": 10,
+          "overlap_ratio": 0.2
+        },
+        {
+          "group_id": 2,
+          "priority": 0.9618356877952459,
+          "group_size": 4,
+          "overlap_ratio": 0.5
+        },
+        {
+          "group_id": 1,
+          "priority": 0.9303679718062348,
+          "group_size": 10,
+          "overlap_ratio": 0.4
+        }
+      ]
+    }
+  },
+  "group_trace_csv": "C:/Users/83718/Desktop/HCC/HCC-main/artifacts/round2/sort-dangerous-ablation/seed-3/group_priority_trace.csv"
+}
