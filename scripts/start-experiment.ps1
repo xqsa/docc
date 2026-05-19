@@ -21,7 +21,7 @@ function Invoke-Git {
         [string[]]$Arguments
     )
 
-    $output = & git @Arguments 2>&1
+    $output = & git @Arguments
     if ($LASTEXITCODE -ne 0) {
         $joined = $Arguments -join " "
         throw "git $joined failed.`n$output"
