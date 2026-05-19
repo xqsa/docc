@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+.codex/
+.codex-tasks/
+
+tmp/
+
+HCC_SRC/result/
+HCC_SRC/HCC_SRC/result/
+
+*.log
