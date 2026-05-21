@@ -1,0 +1,7 @@
+{
+  "enable": false,
+  "save_diagnostics": true,
+  "shared_variable_coordination_mode": "no_coordination",
+  "cc_pass_group_fes": 20,
+  "cc_min_passes": 3
+}

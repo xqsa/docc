@@ -1,0 +1,18 @@
+{
+  "enable": false,
+  "save_diagnostics": true,
+  "save_shared_variable_trace": true,
+  "shared_variable_coordination_mode": "selective_hypergraph_pass_end",
+  "shared_variable_conflict_damping": false,
+  "shared_variable_selective_min_positive_proposals": 2,
+  "shared_variable_selective_max_proposal_std_ratio": 0.00125,
+  "shared_variable_selective_max_update_ratio": 0.0025,
+  "shared_variable_selective_large_update_damping": 0.25,
+  "shared_variable_owner_soft_eta": 0.2,
+  "shared_variable_owner_min_delta_ratio": 0.001,
+  "enable_validated_coordination": true,
+  "validation_mode": "pass_end",
+  "validation_accept_eps": 0.0,
+  "validation_max_extra_fe_ratio": 0.03,
+  "validation_trace_enabled": true
+}

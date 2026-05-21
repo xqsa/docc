@@ -1,0 +1,19 @@
+{
+  "enable": true,
+  "enable_early_switch": true,
+  "enable_trajectory_distill": true,
+  "enable_group_priority": false,
+  "priority_mode": "off",
+  "save_diagnostics": true,
+  "save_shared_variable_trace": true,
+  "shared_variable_coordination_mode": "selective_hypergraph_pass_end",
+  "shared_variable_conflict_damping": true,
+  "shared_variable_conflict_gamma": 0.5,
+  "shared_variable_min_damping": 0.3,
+  "shared_variable_selective_min_positive_proposals": 2,
+  "shared_variable_selective_max_proposal_std_ratio": 0.00125,
+  "shared_variable_selective_max_update_ratio": 0.0025,
+  "shared_variable_selective_large_update_damping": 0.25,
+  "shared_variable_owner_soft_eta": 0.2,
+  "shared_variable_owner_min_delta_ratio": 0.001
+}

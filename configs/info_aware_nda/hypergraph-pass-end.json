@@ -1,0 +1,9 @@
+{
+  "enable": false,
+  "save_diagnostics": true,
+  "save_shared_variable_trace": true,
+  "shared_variable_coordination_mode": "hypergraph_pass_end",
+  "shared_variable_conflict_damping": false,
+  "shared_variable_selective_max_proposal_std_ratio": 0.00125,
+  "shared_variable_selective_max_update_ratio": 0.0025
+}

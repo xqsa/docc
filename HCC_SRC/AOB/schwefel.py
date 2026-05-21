@@ -11,9 +11,12 @@ class schwefel(Benchmarks):
         # Initialize data for Schwefel function
         with open(info_file_path, "r") as file:
             data = yaml.safe_load(file)
-        
+
         self.s_size = data['sub_num']
-        self.dimension = data['dimension']  # Because of overlapping
+        # 决策维对应独立变量维度；expanded_dimension 仅用于解释 overlap 展开后的总长度。
+        self.decision_dimension = int(data['dimension'])
+        self.expanded_dimension = int(data.get('dimension_real', self.decision_dimension))
+        self.dimension = self.decision_dimension
         self.overlap = data['overlap_degree']
         
         # Read vectors and matrices (NumPy arrays instead of tensors)
@@ -38,6 +41,8 @@ class schwefel(Benchmarks):
         return {
             'best': 0.0,
             'dimension': self.dimension,
+            'decision_dimension': self.decision_dimension,
+            'expanded_dimension': self.expanded_dimension,
             'lower': self.minX,
             'threshold': 0,
             'upper': self.maxX
@@ -64,4 +69,3 @@ class schwefel(Benchmarks):
         self.fitness_record.extend(result.tolist())
 
         return result
-

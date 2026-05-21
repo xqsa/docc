@@ -1,0 +1,13 @@
+{
+  "enable": true,
+  "enable_early_switch": true,
+  "enable_trajectory_distill": true,
+  "enable_group_priority": false,
+  "priority_mode": "off",
+  "save_diagnostics": true,
+  "overlap_blend_mode": "safe_conflict",
+  "overlap_blend_min_weight": 0.15,
+  "overlap_blend_max_weight": 0.65,
+  "overlap_blend_conflict_gamma": 1.2,
+  "overlap_blend_min_damping": 0.05
+}

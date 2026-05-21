@@ -11,3 +11,16 @@ HCC_SRC/result/
 HCC_SRC/HCC_SRC/result/
 
 *.log
+
+# Large local research artifacts are kept on disk but not tracked by default.
+# Lightweight final evidence and key Markdown/CSV summaries are allow-listed below.
+artifacts/*
+!artifacts/final_evidence/
+!artifacts/final_evidence/**
+!artifacts/arac_lite_final_3e6_short_audit.md
+!artifacts/arac_lite_final_3e6_short_audit_summary.csv
+!artifacts/arac_lite_v0_7_generalization_report.md
+!artifacts/arac_lite_v0_8_mechanism_ablation_report.md
+
+# External baseline source/data snapshots are local references, not active source.
+external_baselines/

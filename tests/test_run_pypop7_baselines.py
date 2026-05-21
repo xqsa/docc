@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from HCC_SRC.run_pypop7_baselines import (
+    DEFAULT_PROBLEM_CODES,
     _PROBLEM_CACHE,
     build_summary_row,
     get_cached_aob_problem,
@@ -29,6 +30,9 @@ class RunPyPop7BaselinesTests(unittest.TestCase):
         self.assertEqual(parse_problem_code("S6"), ("schwefel", 6, "S6"))
         self.assertEqual(parse_problem_code("R6"), ("rastrigin", 6, "R6"))
         self.assertEqual(parse_problem_code("A6"), ("ackley", 6, "A6"))
+
+    def test_default_problem_codes_match_current_test_subset(self):
+        self.assertEqual(DEFAULT_PROBLEM_CODES, ("E4", "E6", "S4", "S6", "A6", "R6"))
 
     def test_build_summary_row_uses_required_columns(self):
         row = build_summary_row(

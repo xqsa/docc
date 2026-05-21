@@ -42,6 +42,89 @@ class InfoAwareNDAConfig:
     enable_group_delta_trace: bool = True
     priority_audit_topk: int = 3
 
+    # CC pass scheduling
+    cc_pass_group_fes: Optional[int] = None
+    cc_min_passes: int = 1
+    cc_max_passes: Optional[int] = None
+    group_order_mode: str = "rddsm"
+    coordination_order_mode: str = "match_execution"
+    optimizer_state_mode: str = "ephemeral"
+
+    # overlap blend
+    overlap_blend_mode: str = "original"
+    overlap_blend_eps_delta: float = 1e-12
+    overlap_blend_min_weight: float = 0.2
+    overlap_blend_max_weight: float = 0.8
+    overlap_blend_conflict_gamma: float = 0.5
+    overlap_blend_min_damping: float = 0.3
+    save_overlap_blend_trace: bool = True
+
+    # shared-variable coordination
+    shared_variable_coordination_mode: str = "adjacent"
+    shared_variable_conflict_damping: bool = False
+    shared_variable_eps_delta: float = 1e-12
+    shared_variable_conflict_gamma: float = 0.5
+    shared_variable_min_damping: float = 0.3
+    shared_variable_selective_min_positive_proposals: int = 2
+    shared_variable_selective_max_proposal_std_ratio: float = 0.00125
+    shared_variable_selective_max_update_ratio: float = 0.0025
+    shared_variable_selective_large_update_damping: float = 0.25
+    shared_variable_owner_soft_eta: float = 0.2
+    shared_variable_owner_min_delta_ratio: float = 0.001
+    save_shared_variable_trace: bool = True
+
+    # ARAC-lite V0 relation-to-action rules
+    arac_lite_history_min_attempts: int = 2
+    arac_lite_disable_accept_rate_threshold: float = 0.0
+    arac_lite_disable_mean_delta_threshold: float = 0.0
+    arac_lite_disable_reject_streak: int = 2
+    arac_lite_recovery_enabled: bool = False
+    arac_lite_recovery_min_attempts: int = 20
+    arac_lite_recovery_accept_rate_threshold: float = 0.25
+    arac_lite_recovery_delta_threshold: float = 0.0
+    arac_lite_recovery_positive_delta_rate_threshold: float = 0.25
+    arac_lite_recovery_recent_window: int = 20
+    arac_lite_recovery_min_phase: str = "middle"
+    arac_lite_probe_enabled: bool = False
+    arac_lite_probe_every_n_pass: int = 2
+    arac_lite_probe_max_per_pass: int = 5
+    arac_lite_probe_min_phase: str = "middle"
+    arac_lite_probe_recovery_min_attempts: int = 5
+    arac_lite_probe_recovery_accept_rate_threshold: float = 0.3
+    arac_lite_probe_recovery_delta_threshold: float = 0.0
+    arac_lite_probe_recovery_recent_window: int = 20
+    arac_lite_targeted_probe_enabled: bool = False
+    arac_lite_targeted_probe_phase: str = "middle"
+    arac_lite_targeted_probe_min_support: int = 2
+    arac_lite_targeted_probe_min_relation_attempts: int = 1
+    arac_lite_targeted_probe_min_accept_rate: float = 0.3
+    arac_lite_targeted_probe_min_positive_delta_rate: float = 0.3
+    arac_lite_targeted_probe_min_relation_delta: float = 0.0
+    arac_lite_targeted_probe_min_proposal_std_ratio: float = 0.00125
+    arac_lite_targeted_probe_max_proposal_std_ratio: float = 0.0045
+    arac_lite_random_probe_same_budget_enabled: bool = False
+    arac_lite_random_probe_budget: int = 0
+    arac_lite_random_probe_phase: str = "middle"
+    arac_lite_random_probe_seed: int = 0
+
+    # pass-level validated coordination
+    enable_validated_coordination: bool = False
+    validation_mode: str = "off"
+    validation_accept_eps: float = 0.0
+    validation_max_extra_fe_ratio: float = 0.03
+    validation_trace_enabled: bool = True
+
+    # stage-level coordination selector
+    enable_coordination_selector: bool = False
+    selector_probe_passes: int = 1
+    selector_min_attempts: int = 1
+    selector_min_accepts: int = 1
+    selector_accept_rate_threshold: float = 0.3
+    selector_mean_delta_threshold: float = 0.0
+    selector_after_probe_state_if_reject: str = "off"
+    selector_after_probe_state_if_accept: str = "validated_on"
+    selector_trace_enabled: bool = True
+
     # diagnostics
     save_diagnostics: bool = True
     diagnostics_filename: str = "info_aware_nda_diagnostics.json"
@@ -59,6 +142,124 @@ class InfoAwareNDAConfig:
             config.priority_mode = "off"
         config.budget_min_fe = max(1, int(config.budget_min_fe))
         config.priority_audit_topk = max(1, int(config.priority_audit_topk))
+        if config.cc_pass_group_fes is not None:
+            config.cc_pass_group_fes = max(1, int(config.cc_pass_group_fes))
+        config.cc_min_passes = max(1, int(config.cc_min_passes))
+        if config.cc_max_passes is not None:
+            config.cc_max_passes = max(config.cc_min_passes, int(config.cc_max_passes))
+        config.group_order_mode = str(config.group_order_mode or "rddsm").strip().lower()
+        if config.group_order_mode not in {"rddsm", "aob_topology"}:
+            config.group_order_mode = "rddsm"
+        config.coordination_order_mode = str(config.coordination_order_mode or "match_execution").strip().lower()
+        if config.coordination_order_mode not in {"match_execution", "rddsm", "aob_topology"}:
+            config.coordination_order_mode = "match_execution"
+        config.optimizer_state_mode = str(config.optimizer_state_mode or "ephemeral").strip().lower()
+        if config.optimizer_state_mode not in {"ephemeral", "persistent_mean"}:
+            config.optimizer_state_mode = "ephemeral"
+        config.overlap_blend_mode = str(config.overlap_blend_mode or "original").strip().lower()
+        if config.overlap_blend_mode not in {"original", "equation8_correct", "safe_delta", "safe_conflict", "no_blend"}:
+            config.overlap_blend_mode = "original"
+        config.overlap_blend_eps_delta = max(EPSILON, abs(float(config.overlap_blend_eps_delta)))
+        config.overlap_blend_min_weight = float(np.clip(config.overlap_blend_min_weight, 0.0, 1.0))
+        config.overlap_blend_max_weight = float(np.clip(config.overlap_blend_max_weight, config.overlap_blend_min_weight, 1.0))
+        config.overlap_blend_conflict_gamma = max(0.0, float(config.overlap_blend_conflict_gamma))
+        config.overlap_blend_min_damping = float(np.clip(config.overlap_blend_min_damping, 0.0, 1.0))
+        config.shared_variable_coordination_mode = str(config.shared_variable_coordination_mode or "adjacent").strip().lower()
+        if config.shared_variable_coordination_mode not in {"adjacent", "hypergraph_pass_end", "selective_hypergraph_pass_end", "arac_lite_rule", "no_coordination"}:
+            config.shared_variable_coordination_mode = "adjacent"
+        config.shared_variable_conflict_damping = bool(config.shared_variable_conflict_damping)
+        config.shared_variable_eps_delta = max(EPSILON, abs(float(config.shared_variable_eps_delta)))
+        config.shared_variable_conflict_gamma = max(0.0, float(config.shared_variable_conflict_gamma))
+        config.shared_variable_min_damping = float(np.clip(config.shared_variable_min_damping, 0.0, 1.0))
+        config.shared_variable_selective_min_positive_proposals = max(1, int(config.shared_variable_selective_min_positive_proposals))
+        config.shared_variable_selective_max_proposal_std_ratio = max(0.0, float(config.shared_variable_selective_max_proposal_std_ratio))
+        config.shared_variable_selective_max_update_ratio = max(0.0, float(config.shared_variable_selective_max_update_ratio))
+        config.shared_variable_selective_large_update_damping = float(np.clip(config.shared_variable_selective_large_update_damping, 0.0, 1.0))
+        config.shared_variable_owner_soft_eta = float(np.clip(config.shared_variable_owner_soft_eta, 0.0, 1.0))
+        config.shared_variable_owner_min_delta_ratio = max(0.0, float(config.shared_variable_owner_min_delta_ratio))
+        config.arac_lite_history_min_attempts = max(1, int(config.arac_lite_history_min_attempts))
+        config.arac_lite_disable_accept_rate_threshold = float(
+            np.clip(config.arac_lite_disable_accept_rate_threshold, 0.0, 1.0)
+        )
+        config.arac_lite_disable_mean_delta_threshold = float(config.arac_lite_disable_mean_delta_threshold)
+        config.arac_lite_disable_reject_streak = max(1, int(config.arac_lite_disable_reject_streak))
+        config.arac_lite_recovery_enabled = bool(config.arac_lite_recovery_enabled)
+        config.arac_lite_recovery_min_attempts = max(1, int(config.arac_lite_recovery_min_attempts))
+        config.arac_lite_recovery_accept_rate_threshold = float(
+            np.clip(config.arac_lite_recovery_accept_rate_threshold, 0.0, 1.0)
+        )
+        config.arac_lite_recovery_delta_threshold = float(config.arac_lite_recovery_delta_threshold)
+        config.arac_lite_recovery_positive_delta_rate_threshold = float(
+            np.clip(config.arac_lite_recovery_positive_delta_rate_threshold, 0.0, 1.0)
+        )
+        config.arac_lite_recovery_recent_window = max(1, int(config.arac_lite_recovery_recent_window))
+        config.arac_lite_recovery_min_phase = str(config.arac_lite_recovery_min_phase or "middle").strip().lower()
+        if config.arac_lite_recovery_min_phase not in {"early", "middle", "late"}:
+            config.arac_lite_recovery_min_phase = "middle"
+        config.arac_lite_probe_enabled = bool(config.arac_lite_probe_enabled)
+        config.arac_lite_probe_every_n_pass = max(1, int(config.arac_lite_probe_every_n_pass))
+        config.arac_lite_probe_max_per_pass = max(1, int(config.arac_lite_probe_max_per_pass))
+        config.arac_lite_probe_min_phase = str(config.arac_lite_probe_min_phase or "middle").strip().lower()
+        if config.arac_lite_probe_min_phase not in {"early", "middle", "late"}:
+            config.arac_lite_probe_min_phase = "middle"
+        config.arac_lite_probe_recovery_min_attempts = max(1, int(config.arac_lite_probe_recovery_min_attempts))
+        config.arac_lite_probe_recovery_accept_rate_threshold = float(
+            np.clip(config.arac_lite_probe_recovery_accept_rate_threshold, 0.0, 1.0)
+        )
+        config.arac_lite_probe_recovery_delta_threshold = float(config.arac_lite_probe_recovery_delta_threshold)
+        config.arac_lite_probe_recovery_recent_window = max(1, int(config.arac_lite_probe_recovery_recent_window))
+        config.arac_lite_targeted_probe_enabled = bool(config.arac_lite_targeted_probe_enabled)
+        config.arac_lite_targeted_probe_phase = str(config.arac_lite_targeted_probe_phase or "middle").strip().lower()
+        if config.arac_lite_targeted_probe_phase not in {"early", "middle", "late"}:
+            config.arac_lite_targeted_probe_phase = "middle"
+        config.arac_lite_targeted_probe_min_support = max(1, int(config.arac_lite_targeted_probe_min_support))
+        config.arac_lite_targeted_probe_min_relation_attempts = max(
+            0,
+            int(config.arac_lite_targeted_probe_min_relation_attempts),
+        )
+        config.arac_lite_targeted_probe_min_accept_rate = float(
+            np.clip(config.arac_lite_targeted_probe_min_accept_rate, 0.0, 1.0)
+        )
+        config.arac_lite_targeted_probe_min_positive_delta_rate = float(
+            np.clip(config.arac_lite_targeted_probe_min_positive_delta_rate, 0.0, 1.0)
+        )
+        config.arac_lite_targeted_probe_min_relation_delta = float(config.arac_lite_targeted_probe_min_relation_delta)
+        config.arac_lite_targeted_probe_min_proposal_std_ratio = max(
+            0.0,
+            float(config.arac_lite_targeted_probe_min_proposal_std_ratio),
+        )
+        config.arac_lite_targeted_probe_max_proposal_std_ratio = max(
+            config.arac_lite_targeted_probe_min_proposal_std_ratio,
+            float(config.arac_lite_targeted_probe_max_proposal_std_ratio),
+        )
+        config.arac_lite_random_probe_same_budget_enabled = bool(
+            config.arac_lite_random_probe_same_budget_enabled
+        )
+        config.arac_lite_random_probe_budget = max(0, int(config.arac_lite_random_probe_budget))
+        config.arac_lite_random_probe_phase = str(config.arac_lite_random_probe_phase or "middle").strip().lower()
+        if config.arac_lite_random_probe_phase not in {"early", "middle", "late"}:
+            config.arac_lite_random_probe_phase = "middle"
+        config.arac_lite_random_probe_seed = int(config.arac_lite_random_probe_seed)
+        config.enable_validated_coordination = bool(config.enable_validated_coordination)
+        config.validation_mode = str(config.validation_mode or "off").strip().lower()
+        if config.validation_mode not in {"off", "pass_end"}:
+            config.validation_mode = "off"
+        config.validation_accept_eps = max(0.0, float(config.validation_accept_eps))
+        config.validation_max_extra_fe_ratio = float(np.clip(config.validation_max_extra_fe_ratio, 0.0, 1.0))
+        config.validation_trace_enabled = bool(config.validation_trace_enabled)
+        config.enable_coordination_selector = bool(config.enable_coordination_selector)
+        config.selector_probe_passes = max(1, int(config.selector_probe_passes))
+        config.selector_min_attempts = max(1, int(config.selector_min_attempts))
+        config.selector_min_accepts = max(1, int(config.selector_min_accepts))
+        config.selector_accept_rate_threshold = float(np.clip(config.selector_accept_rate_threshold, 0.0, 1.0))
+        config.selector_mean_delta_threshold = float(config.selector_mean_delta_threshold)
+        config.selector_after_probe_state_if_reject = str(config.selector_after_probe_state_if_reject or "off").strip().lower()
+        if config.selector_after_probe_state_if_reject not in {"off", "validated_on", "conservative_on"}:
+            config.selector_after_probe_state_if_reject = "off"
+        config.selector_after_probe_state_if_accept = str(config.selector_after_probe_state_if_accept or "validated_on").strip().lower()
+        if config.selector_after_probe_state_if_accept not in {"off", "validated_on", "conservative_on"}:
+            config.selector_after_probe_state_if_accept = "validated_on"
+        config.selector_trace_enabled = bool(config.selector_trace_enabled)
         if config.max_nda_fe_ratio is not None and config.max_nda_fe_ratio < config.min_nda_fe_ratio:
             config.max_nda_fe_ratio = config.min_nda_fe_ratio
         return config
@@ -582,6 +783,16 @@ def build_info_aware_diagnostics_payload(
     sort_dangerous_ablation_changed_order=False,
     group_trace_rows=None,
     priority_audit=None,
+    overlap_blend_rows=None,
+    overlap_blend_summary=None,
+    shared_variable_proposal_rows=None,
+    shared_variable_fusion_rows=None,
+    shared_variable_coordination_summary=None,
+    coordination_visibility_audit=None,
+    validated_coordination_rows=None,
+    validated_coordination_summary=None,
+    coordination_selector_rows=None,
+    coordination_selector_summary=None,
 ):
     normalized_config = config.normalized()
     nda_info = nda_info or NDAInfo()
@@ -592,8 +803,23 @@ def build_info_aware_diagnostics_payload(
     group_priority = cc_prior.group_priority if cc_prior is not None else np.empty((0,), dtype=float)
     group_trace_rows = list(group_trace_rows or [])
     priority_audit = priority_audit or {}
+    overlap_blend_rows = list(overlap_blend_rows or [])
+    overlap_blend_summary = overlap_blend_summary or {}
+    shared_variable_proposal_rows = list(shared_variable_proposal_rows or [])
+    shared_variable_fusion_rows = list(shared_variable_fusion_rows or [])
+    shared_variable_coordination_summary = shared_variable_coordination_summary or {}
+    coordination_visibility_audit = coordination_visibility_audit or {}
+    validated_coordination_rows = list(validated_coordination_rows or [])
+    validated_coordination_summary = validated_coordination_summary or {}
+    coordination_selector_rows = list(coordination_selector_rows or [])
+    coordination_selector_summary = coordination_selector_summary or {}
     priority_audit_warnings = list(priority_audit.get("audit_warnings", []))
     group_trace_sample = [_json_safe_mapping(row) for row in group_trace_rows[:10]]
+    overlap_blend_sample = [_json_safe_mapping(row) for row in overlap_blend_rows[:10]]
+    shared_variable_proposal_sample = [_json_safe_mapping(row) for row in shared_variable_proposal_rows[:10]]
+    shared_variable_fusion_sample = [_json_safe_mapping(row) for row in shared_variable_fusion_rows[:10]]
+    validated_coordination_sample = [_json_safe_mapping(row) for row in validated_coordination_rows[:10]]
+    coordination_selector_sample = [_json_safe_mapping(row) for row in coordination_selector_rows[:10]]
 
     payload = {
         "info_aware_nda_enabled": bool(normalized_config.enable),
@@ -629,6 +855,21 @@ def build_info_aware_diagnostics_payload(
         "positive_delta_rate_topk": _json_safe_scalar(priority_audit.get("positive_delta_rate_topk")),
         "positive_delta_rate_all": _json_safe_scalar(priority_audit.get("positive_delta_rate_all")),
         "group_trace_sample": group_trace_sample,
+        "overlap_blend_count": int(len(overlap_blend_rows)),
+        "overlap_blend_sample": overlap_blend_sample,
+        "overlap_blend_summary": _json_safe_mapping(overlap_blend_summary),
+        "shared_variable_proposal_count": int(len(shared_variable_proposal_rows)),
+        "shared_variable_fusion_count": int(len(shared_variable_fusion_rows)),
+        "shared_variable_proposal_sample": shared_variable_proposal_sample,
+        "shared_variable_fusion_sample": shared_variable_fusion_sample,
+        "shared_variable_coordination_summary": _json_safe_mapping(shared_variable_coordination_summary),
+        "coordination_visibility_audit": _json_safe_mapping(coordination_visibility_audit),
+        "validated_coordination_count": int(len(validated_coordination_rows)),
+        "validated_coordination_sample": validated_coordination_sample,
+        "validated_coordination_summary": _json_safe_mapping(validated_coordination_summary),
+        "coordination_selector_count": int(len(coordination_selector_rows)),
+        "coordination_selector_sample": coordination_selector_sample,
+        "coordination_selector_summary": _json_safe_mapping(coordination_selector_summary),
         "priority_audit_warnings": priority_audit_warnings,
         "execution_order": [int(group_id) for group_id in (execution_order or [])],
         "warnings": warnings,

@@ -32,7 +32,7 @@ except ImportError:
     from HCC.OPT.CMAES.cmaes import CMAES as LocalCMAES
     from baselines.pypop7_adapter import SUPPORTED_OPTIMIZERS, run_pypop7_optimizer
 
-DEFAULT_PROBLEM_CODES = ("E4", "E6", "S4", "S6", "R6", "A6")
+DEFAULT_PROBLEM_CODES = ("E4", "E6", "S4", "S6", "A6", "R6")
 DEFAULT_SEEDS = (1, 2, 3)
 DEFAULT_TFES = int(1e5)
 DEFAULT_SIGMA = 1.0

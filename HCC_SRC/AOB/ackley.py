@@ -13,7 +13,10 @@ class ackley(Benchmarks):
             data = yaml.safe_load(file)
 
         self.s_size = data['sub_num']
-        self.dimension = data['dimension_real']
+        # 决策维始终对应独立变量维度；dimension_real 只是按 overlap 展开的子空间总长度。
+        self.decision_dimension = int(data['dimension'])
+        self.expanded_dimension = int(data.get('dimension_real', self.decision_dimension))
+        self.dimension = self.decision_dimension
         self.overlap = data['overlap_degree']
 
         self.Ovector = self.readOvector()
@@ -35,7 +38,15 @@ class ackley(Benchmarks):
         return self.compute(x)
 
     def info(self):
-        info = {'best': 0.0, 'dimension': self.dimension, 'lower': self.minX, 'threshold': 0, 'upper': self.maxX}
+        info = {
+            'best': 0.0,
+            'dimension': self.dimension,
+            'decision_dimension': self.decision_dimension,
+            'expanded_dimension': self.expanded_dimension,
+            'lower': self.minX,
+            'threshold': 0,
+            'upper': self.maxX,
+        }
         return info
 
     def compute(self, x):

@@ -1,0 +1,7 @@
+problem,paper_HCC_mean,paper_HCC_std,source
+E4,2.26E7,3.04E5,"Two-Phase CC.pdf Table 2 HCC-ES Perf/std, 3E6 TFEs, 25 runs"
+E6,4.32E7,1.94E5,"Two-Phase CC.pdf Table 2 HCC-ES Perf/std, 3E6 TFEs, 25 runs"
+S4,1.24E3,5.31E1,"Two-Phase CC.pdf Table 2 HCC-ES Perf/std, 3E6 TFEs, 25 runs"
+S6,6.65E4,7.36E2,"Two-Phase CC.pdf Table 2 HCC-ES Perf/std, 3E6 TFEs, 25 runs"
+A6,7.80E4,7.06E0,"Two-Phase CC.pdf Table 2 HCC-ES Perf/std, 3E6 TFEs, 25 runs"
+R6,8.15E5,2.30E4,"Two-Phase CC.pdf Table 2 HCC-ES Perf/std, 3E6 TFEs, 25 runs"

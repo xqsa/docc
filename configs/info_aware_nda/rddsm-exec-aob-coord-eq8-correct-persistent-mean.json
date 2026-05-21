@@ -1,0 +1,10 @@
+{
+  "enable": false,
+  "save_diagnostics": true,
+  "group_order_mode": "rddsm",
+  "coordination_order_mode": "aob_topology",
+  "shared_variable_coordination_mode": "adjacent",
+  "overlap_blend_mode": "equation8_correct",
+  "optimizer_state_mode": "persistent_mean"
+}
+
